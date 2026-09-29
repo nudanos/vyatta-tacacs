@@ -1,4 +1,5 @@
 #!/usr/bin/make -f
+export GO111MODULE := off
 
 export DH_GOPKG := eng.vyatta.net/tacplus
 

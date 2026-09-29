@@ -1,17 +1,20 @@
 Source: vyatta-tacacs
-Section: contrib/net
-Priority: extra
-Maintainer: Vyatta Package Maintainers <DL-vyatta-help@att.com>
-Build-Depends: debhelper (>= 9),
-         golang (>=2:1.4),
-         golang-dbus-dev,
-         golang-github-danos-aaa-dev (>= 2.0),
-         golang-github-danos-utils-pathutil-dev,
-         dh-golang,
-         dh-python,
-         dh-yang,
-         python3
-Standards-Version: 3.9.8
+Section: net
+Priority: optional
+Maintainer: NuDanOS Maintainers <jon@fernandez.tech>
+Build-Depends: debhelper-compat (= 13),
+ golang (>=2:1.4),
+ golang-dbus-dev,
+ golang-github-danos-aaa-dev (>= 2.0),
+ golang-github-danos-utils-pathutil-dev,
+ dh-golang,
+ dh-python,
+ dh-yang,
+ python3
+Standards-Version: 4.7.2
+Rules-Requires-Root: no
+Vcs-Git: https://github.com/nudanos/vyatta-tacacs.git
+Vcs-Browser: https://github.com/nudanos/vyatta-tacacs
 
 Package: vyatta-tacacs
 Architecture: all
