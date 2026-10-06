@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+if [ "$1" = remove ]; then
+    # the TACACS+ login profile and its root-only servers file
+    DEBIAN_FRONTEND=noninteractive pam-auth-update --package --remove vyatta-tacplus || true
+    rm -f /etc/tacplus_servers
+fi
+#DEBHELPER#
+exit 0

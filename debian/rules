@@ -41,3 +41,8 @@ override_dh_auto_build: vet
 vet:
 	GOPATH=$(GO_PATH) go vet $$(find . -type f -name \*.go | \
 	xargs dirname | sort -u | grep -v "/vendor/");
+
+# NuDanOS: the TACACS+ login helpers
+override_dh_auto_test:
+	dh_auto_test --buildsystem=golang --builddirectory=$(GOBUILDDIR)
+	prove -Ilib t/

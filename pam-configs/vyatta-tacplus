@@ -1,0 +1,11 @@
+Name: TACACS+ login (NuDanOS: pam_tacplus, servers in /etc/tacplus_servers)
+Default: no
+Priority: 260
+Auth-Type: Primary
+Auth:
+	[success=end default=ignore]	pam_tacplus.so include=/etc/tacplus_servers login=login try_first_pass
+Auth-Initial:
+	[success=end default=ignore]	pam_tacplus.so include=/etc/tacplus_servers login=login
+Account-Type: Primary
+Account:
+	[success=end new_authtok_reqd=done default=ignore]	pam_tacplus.so include=/etc/tacplus_servers login=login service=shell protocol=ssh

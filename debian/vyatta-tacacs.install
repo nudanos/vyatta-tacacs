@@ -6,3 +6,4 @@ scripts/vyatta-tacplus-op opt/vyatta/bin
 scripts/vyatta-tacplus-rpc opt/vyatta/sbin
 lib/vyatta usr/lib/python3/dist-packages
 lib/Vyatta opt/vyatta/share/perl5
+pam-configs/vyatta-tacplus usr/share/pam-configs

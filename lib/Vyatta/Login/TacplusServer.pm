@@ -31,6 +31,7 @@ use Sys::Syslog qw (LOG_NOTICE LOG_DEBUG);
 use lib "/opt/vyatta/share/perl5";
 use Vyatta::Config;
 use Vyatta::DSCP qw(dscp_lookup);
+use Vyatta::Login::TacplusLogin qw(servers_file_content level_groups write_private_file);
 
 my $package = 'tacplus';	# pam package name
 
@@ -50,6 +51,12 @@ Readonly my $PAM_AUTH_UPDATE_TACACS => "/opt/vyatta/sbin/vyatta_tacacs_pam_auth_
 Readonly my $PAM_AUTH_UPDATE_TACACS_CONF => "/usr/share/pam-configs/vyatta-sssd-tacacs";
 
 Readonly my $TACACS_ENV => "/var/run/tacplus.env";
+
+# TACACS+ login (pam_tacplus + nss_tacplus): Debian 13's sssd has no
+# TACACS+ provider.
+Readonly my $TACPLUS_SERVERS => "/etc/tacplus_servers";
+Readonly my $PAM_TACPLUS_PROFILE => "vyatta-tacplus";
+Readonly my $LEVEL_FILE => "/opt/vyatta/etc/level";
 Readonly my $TACPLUSD => 'tacplusd';
 
 my (undef, undef, $TACPLUSD_UID, undef) = getpwnam("tacplusd")
@@ -247,6 +254,56 @@ sub setup_tacplusd {
     unlink($TACACS_TMP);
 }
 
+# The configured, enabled servers of $TACACS_PATH, in configd's order.
+sub login_servers {
+    my $rconfig = Vyatta::Config->new();
+    my $global_port = $rconfig->returnValue("$TACACS_GLOBAL_PATH port") // 49;
+    my $global_secret = $rconfig->returnValue("$TACACS_GLOBAL_PATH secret");
+    my $timeout = $rconfig->returnValue("$TACACS_GLOBAL_PATH timeout");
+    my @servers;
+    return ( \@servers, $timeout ) unless defined $TACACS_PATH;
+    $rconfig->setLevel($TACACS_PATH);
+    my %status = $rconfig->listNodeStatus();
+    for my $server ( $rconfig->listNodes() ) {
+        next if $status{$server} eq 'deleted';
+        next if $rconfig->exists("$server disable");
+        my $secret = $rconfig->returnValue("$server secret") // $global_secret;
+        next unless defined $secret;
+        push @servers, { address => $server,
+            port => $rconfig->returnValue("$server port") // $global_port,
+            secret => $secret };
+        $timeout //= $rconfig->returnValue("$server timeout");
+    }
+    return ( \@servers, $timeout );
+}
+
+# Login through pam_tacplus and nss_tacplus: write the root-only servers
+# file, give the mapped accounts their DANOS level's groups (privilege 15:
+# admin, 0-14: operator), and enable the PAM profile; with no servers (or
+# TACACS+ disabled by the auth chain) remove the profile and the file.
+sub setup_pam_nss_tacplus {
+    my ($status) = @_;
+    my ( $servers, $timeout ) = login_servers();
+    if ( $status eq "disable" || !@$servers ) {
+        system("DEBIAN_FRONTEND=noninteractive pam-auth-update --package --remove $PAM_TACPLUS_PROFILE") == 0
+            or die "pam-auth-update --remove $PAM_TACPLUS_PROFILE failed\n";
+        unlink $TACPLUS_SERVERS;
+        return;
+    }
+    write_private_file( $TACPLUS_SERVERS, servers_file_content( $servers, $timeout ) );
+    for my $level ( 0 .. 15 ) {
+        my $user = "tacacs$level";
+        next unless getpwnam($user);
+        my @groups = grep { getgrnam($_) }
+            level_groups( $level == 15 ? 'admin' : 'operator', $LEVEL_FILE );
+        system( "usermod", "-G", join( ',', 'tacacs', @groups ), $user ) == 0
+            or die "usermod $user failed\n";
+    }
+    system("DEBIAN_FRONTEND=noninteractive pam-auth-update --package --enable $PAM_TACPLUS_PROFILE") == 0
+        or die "pam-auth-update --enable $PAM_TACPLUS_PROFILE failed\n";
+    return;
+}
+
 sub setup_sssd_tacplus {
     my ($status, $chain_prio, $enforce, $vrf_exists) = @_;
 
@@ -344,7 +401,9 @@ sub update {
 
     setup_tacacs_path($cfg_status // $status);
     my $vrf_exists = check_tacplus_status();
-    setup_sssd_tacplus($status, $chain_prio, $enforce, $vrf_exists);
+    # NuDanOS: login through pam_tacplus + nss_tacplus; DANOS's SSSD
+    # provider is not in Debian 13 (setup_sssd_tacplus is no longer called).
+    setup_pam_nss_tacplus($status);
 
     setup_tacplusd($cfg_status // $status, $vrf_exists);
     return;
