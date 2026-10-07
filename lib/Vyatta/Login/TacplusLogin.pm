@@ -16,7 +16,8 @@ use Exporter qw(import);
 use File::Temp qw(tempfile);
 use File::Basename qw(dirname);
 
-our @EXPORT_OK = qw(servers_file_content level_groups write_private_file);
+our @EXPORT_OK =
+  qw(servers_file_content level_groups write_private_file mapped_account_command);
 
 # servers_file_content(\@servers, $timeout): the include= file pam_tacplus
 # and nss_tacplus read. Each secret precedes its server, so it applies to
@@ -48,6 +49,18 @@ sub level_groups {
     }
     close $fh;
     return ();
+}
+
+# mapped_account_command($level, $shell): the command that creates the
+# mapped account tacacs$level, as libtacplus-map1's postinst creates it:
+# uid 1000 or above, since nss_tacplus maps a uid back to its TACACS+ user
+# only from min_uid (1001) up.
+sub mapped_account_command {
+    my ( $level, $shell ) = @_;
+    return ( 'adduser', '--quiet', '--firstuid', '1000', '--disabled-login',
+        '--ingroup', 'tacacs', '--shell', $shell,
+        '--gecos', "TACACS+ mapped user at privilege level $level",
+        "tacacs$level" );
 }
 
 # write_private_file($path, $content): replace $path atomically, readable

@@ -31,7 +31,8 @@ use Sys::Syslog qw (LOG_NOTICE LOG_DEBUG);
 use lib "/opt/vyatta/share/perl5";
 use Vyatta::Config;
 use Vyatta::DSCP qw(dscp_lookup);
-use Vyatta::Login::TacplusLogin qw(servers_file_content level_groups write_private_file);
+use Vyatta::Login::TacplusLogin
+  qw(servers_file_content level_groups write_private_file mapped_account_command);
 
 my $package = 'tacplus';	# pam package name
 
@@ -278,9 +279,10 @@ sub login_servers {
 }
 
 # Login through pam_tacplus and nss_tacplus: write the root-only servers
-# file, give the mapped accounts their DANOS level's groups (privilege 15:
-# admin, 0-14: operator), and enable the PAM profile; with no servers (or
-# TACACS+ disabled by the auth chain) remove the profile and the file.
+# file, create any missing mapped account, give each its DANOS level's
+# groups (privilege 15: admin, 0-14: operator), and enable the PAM
+# profile; with no servers (or TACACS+ disabled by the auth chain) remove
+# the profile and the file.
 sub setup_pam_nss_tacplus {
     my ($status) = @_;
     my ( $servers, $timeout ) = login_servers();
@@ -291,9 +293,15 @@ sub setup_pam_nss_tacplus {
         return;
     }
     write_private_file( $TACPLUS_SERVERS, servers_file_content( $servers, $timeout ) );
+    my $shell = -x '/bin/vbash' ? '/bin/vbash' : '/bin/bash';
     for my $level ( 0 .. 15 ) {
         my $user = "tacacs$level";
-        next unless getpwnam($user);
+        # a missing account (removed by hand, or by an older vyatta-login,
+        # which deleted them) is created again
+        unless ( getpwnam($user) ) {
+            system( mapped_account_command( $level, $shell ) ) == 0
+              or die "adduser $user failed\n";
+        }
         my @groups = grep { getgrnam($_) }
             level_groups( $level == 15 ? 'admin' : 'operator', $LEVEL_FILE );
         system( "usermod", "-G", join( ',', 'tacacs', @groups ), $user ) == 0
